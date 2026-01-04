@@ -50,7 +50,7 @@ API RESTful untuk sistem pemesanan tiket kereta api yang dibangun dengan Laravel
 3. **Setup environment**
 ```bash
    cp .env.example .env
-   php artisan key: generate
+   php artisan key:generate
 ```
 
 4. **Configure database** di `.env`
