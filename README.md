@@ -178,7 +178,7 @@ Authorization: Bearer 1|xxxxxxxxxxxxxx
 
 ## 🛠️ Tech Stack
 
-- **Framework**: Laravel 11
+- **Framework**: Laravel 12
 - **Authentication**: Laravel Sanctum
 - **Database**: MySQL/PostgreSQL
 - **Documentation**: Scramble
@@ -252,7 +252,7 @@ This project is licensed under the MIT License.
 
 ## 📞 Contact
 
-- Email: support@trainbooking.com
+- Email: @
 - Documentation: [http://localhost:8000/docs/api](http://localhost:8000/docs/api)
 
 ---
