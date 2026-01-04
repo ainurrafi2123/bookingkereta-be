@@ -7,60 +7,254 @@
 <a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
 </p>
 
-## About Laravel
+# 🚄 Train Ticket Booking API
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+API RESTful untuk sistem pemesanan tiket kereta api yang dibangun dengan Laravel 11 dan menggunakan Laravel Sanctum untuk autentikasi.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+---
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## 📋 Features
 
-## Learning Laravel
+- 🔐 Autentikasi dengan Laravel Sanctum (Bearer Token)
+- 👤 Manajemen User & Penumpang
+- 🚂 CRUD Kereta, Gerbong, dan Kursi
+- 📅 Manajemen Jadwal Kereta
+- 🎫 Sistem Booking & Pembatalan Tiket
+- 📊 Dashboard Statistik untuk Petugas
+- 🔒 Role-based Access Control (User & Petugas)
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+---
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+## 🚀 Getting Started
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+### Prerequisites
 
-## Laravel Sponsors
+- PHP >= 8.2
+- Composer
+- MySQL/PostgreSQL
+- Laravel 12
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+### Installation
 
-### Premium Partners
+1. **Clone repository**
+```bash
+   git clone https://github.com/yourusername/train-booking-api.git
+   cd train-booking-api
+```
 
-- **[Vehikl](https://vehikl.com/)**
-- **[Tighten Co.](https://tighten.co)**
-- **[WebReinvent](https://webreinvent.com/)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel/)**
-- **[Cyber-Duck](https://cyber-duck.co.uk)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Jump24](https://jump24.co.uk)**
-- **[Redberry](https://redberry.international/laravel/)**
-- **[Active Logic](https://activelogic.com)**
-- **[byte5](https://byte5.de)**
-- **[OP.GG](https://op.gg)**
+2. **Install dependencies**
+```bash
+   composer install
+```
 
-## Contributing
+3. **Setup environment**
+```bash
+   cp .env.example .env
+   php artisan key: generate
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+4. **Configure database** di `.env`
+```env
+   DB_CONNECTION=mysql
+   DB_HOST=127.0.0.1
+   DB_PORT=3306
+   DB_DATABASE=train_booking
+   DB_USERNAME=root
+   DB_PASSWORD=
+```
 
-## Code of Conduct
+5. **Create database tables**
+```bash
+   php artisan migrate
+```
+   > Semua tabel akan otomatis dibuat dari migration files
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+6. **Serve application**
+```bash
+   php artisan serve
+```
 
-## Security Vulnerabilities
+---
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+## 📚 API Documentation
 
-## License
+### **Akses dokumentasi lengkap di:**
+```
+http://localhost:8000/docs/api
+```
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Dokumentasi dibuat menggunakan **[Scramble](https://scramble.dedoc.co/)** yang otomatis generate dari routes dan validation rules.
+
+### Features Dokumentasi:
+- ✅ List semua endpoints
+- ✅ Request & Response examples
+- ✅ Authentication setup
+- ✅ Try it out feature
+- ✅ Export to Postman/OpenAPI
+
+---
+
+## 🔑 Authentication
+
+API menggunakan **Laravel Sanctum** dengan Bearer Token.
+
+### Quick Example:
+
+**1. Register**
+```bash
+POST /api/v1/auth/register
+Content-Type: application/json
+
+{
+  "name": "John Doe",
+  "email": "john@example.com",
+  "password": "password123",
+  "password_confirmation": "password123"
+}
+```
+
+**2. Login**
+```bash
+POST /api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "john@example.com",
+  "password": "password123"
+}
+
+# Response:
+{
+  "success": true,
+  "data": {
+    "token": "1|xxxxxxxxxxxxxx"
+  }
+}
+```
+
+**3. Use Token**
+```bash
+GET /api/v1/users/me
+Authorization: Bearer 1|xxxxxxxxxxxxxx
+```
+
+---
+
+## 👥 User Roles
+
+| Role | Permissions |
+|------|-------------|
+| **User** | Lihat jadwal, booking tiket, manage profile sendiri |
+| **Petugas** | Full access + manage semua data + statistik |
+
+---
+
+## 📦 Main Endpoints
+
+| Resource | Endpoint | Description |
+|----------|----------|-------------|
+| Auth | `/api/v1/auth/*` | Register, login, logout |
+| Users | `/api/v1/users/*` | User management |
+| Kereta | `/api/v1/kereta/*` | Train data |
+| Gerbong | `/api/v1/gerbong/*` | Carriage data |
+| Kursi | `/api/v1/kursi/*` | Seat management |
+| Jadwal | `/api/v1/jadwal-kereta/*` | Train schedules |
+| Booking | `/api/v1/pembelian-tiket/*` | Ticket booking |
+
+**📖 Untuk detail lengkap, kunjungi: [http://localhost:8000/docs/api](http://localhost:8000/docs/api)**
+
+---
+
+## 🧪 Testing
+
+### Import ke Postman
+
+1. Buka Postman
+2. Import → Link
+3. Paste URL: `http://localhost:8000/docs/api.json`
+4. Collection akan otomatis ter-import
+
+---
+
+## 🛠️ Tech Stack
+
+- **Framework**: Laravel 11
+- **Authentication**: Laravel Sanctum
+- **Database**: MySQL/PostgreSQL
+- **Documentation**: Scramble
+- **API Standard**: RESTful
+
+---
+
+## 📁 Project Structure
+```
+├── app/
+│   └── Http/
+│       └── Controllers/
+│           ├── AuthController.php
+│           ├── UserController.php
+│           ├── KeretaController.php
+│           ├── GerbongController.php
+│           ├── KursiController.php
+│           ├── JadwalKeretaController.php
+│           └── PembelianTiketController.php
+├── routes/
+│   └── api.php                    # All API routes
+├── config/
+│   └── scramble.php               # API documentation config
+└── README.md
+```
+
+---
+
+## 🔧 Configuration
+
+### API Versioning
+API menggunakan versioning dengan prefix `v1`:
+```
+/api/v1/*
+```
+
+### Rate Limiting
+- Guest: 10 requests/minute
+- Authenticated: 60 requests/minute
+
+---
+
+## 📝 Environment Variables
+```env
+APP_NAME="Train Booking API"
+APP_URL=http://localhost:8000
+
+DB_CONNECTION=mysql
+DB_DATABASE=train_booking
+
+SANCTUM_STATEFUL_DOMAINS=localhost:8000
+```
+
+---
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to branch (`git push origin feature/AmazingFeature`)
+5. Open Pull Request
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License.
+
+---
+
+## 📞 Contact
+
+- Email: support@trainbooking.com
+- Documentation: [http://localhost:8000/docs/api](http://localhost:8000/docs/api)
+
+---
+
+**Made with ❤️ using Laravel**
