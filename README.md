@@ -9,7 +9,7 @@
 
 # 🚄 Train Ticket Booking API
 
-API RESTful untuk sistem pemesanan tiket kereta api yang dibangun dengan Laravel 11 dan menggunakan Laravel Sanctum untuk autentikasi.
+API RESTful untuk sistem pemesanan tiket kereta api yang dibangun dengan laravel 12 dan menggunakan Laravel Sanctum untuk autentikasi.
 
 ---
 
@@ -61,6 +61,9 @@ API RESTful untuk sistem pemesanan tiket kereta api yang dibangun dengan Laravel
    DB_DATABASE=train_booking
    DB_USERNAME=root
    DB_PASSWORD=
+
+   // set ke cookie
+   SESSION_DRIVER=cookie
 ```
 
 5. **Create database tables**
