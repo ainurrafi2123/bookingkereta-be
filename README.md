@@ -38,8 +38,8 @@ API RESTful untuk sistem pemesanan tiket kereta api yang dibangun dengan Laravel
 
 1. **Clone repository**
 ```bash
-   git clone https://github.com/yourusername/train-booking-api.git
-   cd train-booking-api
+   git clone https://github.com/ainurrafi2123/bookingkereta-be.git
+   cd bookingkereta-be
 ```
 
 2. **Install dependencies**
