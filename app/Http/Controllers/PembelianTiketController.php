@@ -274,75 +274,7 @@ class PembelianTiketController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Receipt pembelian tiket',
-            'data' => [
-                // Header Info
-                'perusahaan' => [
-                    'nama' => 'PT KERETA API INDONESIA (PERSERO)',
-                    'npwp' => 'NPWP 01.000.016.4-083.000',
-                ],
-                
-                // Detail Pembayaran
-                'detail_pembayaran' => [
-                    'tanggal_pembayaran' => $pembelian->tanggal_pembelian->format('d M Y, H:i'),
-                    'metode_pembayaran' => $pembelian->metode_pembayaran ?? 'ATM',
-                    'kode_pemesanan' => $pembelian->kode_tiket,
-                ],
-
-                // Rincian Tiket
-                'rincian' => [
-                    'kereta' => $pembelian->jadwalKereta->kereta->nama_kereta . ' (' . $pembelian->jadwalKereta->kode_jadwal . ')',
-                    'kelas' => strtoupper($pembelian->jadwalKereta->kereta->kelas_kereta),
-                    'kode_pemesanan' => $pembelian->kode_tiket,
-                    'penumpang' => $pembelian->detailPembelian->map(function($detail) {
-                        return [
-                            'nama' => strtoupper($detail->nama_penumpang),
-                            'harga' => 'Rp. ' . number_format($detail->harga, 0, ',', '.'),
-                        ];
-                    }),
-                ],
-
-                // Total Pembayaran
-                'total_pembayaran' => 'Rp. ' . number_format($pembelian->total_harga, 0, ',', '.'),
-                'ppn_info' => 'Tidak termasuk PPN.',
-                'ppn_disclaimer' => 'PPN dibebaskan berdasarkan pasal 16B Undang Undang Harmonisasi Peraturan Perpajakan.',
-
-                // Kode Pemesanan (untuk barcode)
-                'kode_pemesanan_display' => $pembelian->kode_tiket,
-
-                // Pemesanan Info
-                'pemesanan' => [
-                    'nama' => strtoupper($pembelian->penumpang->user->username ?? 'N/A'),
-                    'no_telepon' => $pembelian->penumpang->user->no_telepon ?? '0',
-                    'email' => $pembelian->penumpang->user->email ?? 'N/A',
-                    'tanggal_pesan' => $pembelian->tanggal_pembelian->format('d M Y, H:i:s'),
-                    'pemesanan_melalui' => 'KAI Access',
-                ],
-
-                // Detail Pemesanan (Perjalanan)
-                'detail_pemesanan' => [
-                    [
-                        'kereta' => strtoupper($pembelian->jadwalKereta->kereta->nama_kereta),
-                        'nomor_ka' => $pembelian->jadwalKereta->kode_jadwal,
-                        'keberangkatan' => strtoupper($pembelian->jadwalKereta->asal_keberangkatan) . ' | ' . 
-                                        $pembelian->jadwalKereta->tanggal_berangkat->format('d M Y, H:i'),
-                        'tujuan' => strtoupper($pembelian->jadwalKereta->tujuan_keberangkatan) . ' | ' . 
-                                $pembelian->jadwalKereta->tanggal_kedatangan->format('d M Y, H:i'),
-                    ]
-                ],
-
-                // Detail Penumpang
-                'detail_penumpang' => $pembelian->detailPembelian->map(function($detail) {
-                    return [
-                        'penumpang' => strtoupper($detail->nama_penumpang),
-                        'kursi' => $detail->kursi->gerbong->nama_gerbong . ' ' . $detail->kursi->no_kursi,
-                        'kelas' => strtoupper($detail->kategori),
-                        'no_identitas' => $detail->nik,
-                    ];
-                }),
-
-                // Status
-                'status' => $pembelian->status,
-            ]
+            'data' => $this->formatReceiptData($pembelian),
         ]);
     }
 
@@ -377,94 +309,87 @@ class PembelianTiketController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Receipt pembelian tiket',
-            'data' => [
-                // Header Info
-                'perusahaan' => [
-                    'nama' => 'PT KERETA API INDONESIA (PERSERO)',
-                    'npwp' => 'NPWP 01.000.016.4-083.000',
-                ],
-                
-                // Detail Pembayaran
-                'detail_pembayaran' => [
-                    'tanggal_pembayaran' => $pembelian->tanggal_pembelian->format('d M Y, H:i'),
-                    'metode_pembayaran' => $pembelian->metode_pembayaran ?? 'ATM',
-                    'kode_pemesanan' => $pembelian->kode_tiket,
-                ],
-
-                // Rincian Tiket
-                'rincian' => [
-                    'kereta' => $pembelian->jadwalKereta->kereta->nama_kereta . ' (' . $pembelian->jadwalKereta->kode_jadwal . ')',
-                    'kelas' => strtoupper($pembelian->jadwalKereta->kereta->kelas_kereta),
-                    'kode_pemesanan' => $pembelian->kode_tiket,
-                    'penumpang' => $pembelian->detailPembelian->map(function($detail) {
-                        return [
-                            'nama' => strtoupper($detail->nama_penumpang),
-                            'harga' => 'Rp. ' . number_format($detail->harga, 0, ',', '.'),
-                        ];
-                    }),
-                ],
-
-                // Total Pembayaran
-                'total_pembayaran' => 'Rp. ' . number_format($pembelian->total_harga, 0, ',', '.'),
-                'ppn_info' => 'Tidak termasuk PPN.',
-                'ppn_disclaimer' => 'PPN dibebaskan berdasarkan pasal 16B Undang Undang Harmonisasi Peraturan Perpajakan.',
-
-                // Kode Pemesanan (untuk barcode)
-                'kode_pemesanan_display' => $pembelian->kode_tiket,
-
-                // Pemesanan Info
-                'pemesanan' => [
-                    'nama' => strtoupper($pembelian->penumpang->user->username ?? 'N/A'),
-                    'no_telepon' => $pembelian->penumpang->user->no_telepon ?? '0',
-                    'email' => $pembelian->penumpang->user->email ?? 'N/A',
-                    'tanggal_pesan' => $pembelian->tanggal_pembelian->format('d M Y, H:i:s'),
-                    'pemesanan_melalui' => 'KAI Access',
-                ],
-
-                // Detail Pemesanan (Perjalanan)
-                'detail_pemesanan' => [
-                    [
-                        'kereta' => strtoupper($pembelian->jadwalKereta->kereta->nama_kereta),
-                        'nomor_ka' => $pembelian->jadwalKereta->kode_jadwal,
-                        'keberangkatan' => strtoupper($pembelian->jadwalKereta->asal_keberangkatan) . ' | ' . 
-                                        $pembelian->jadwalKereta->tanggal_berangkat->format('d M Y, H:i'),
-                        'tujuan' => strtoupper($pembelian->jadwalKereta->tujuan_keberangkatan) . ' | ' . 
-                                $pembelian->jadwalKereta->tanggal_kedatangan->format('d M Y, H:i'),
-                    ]
-                ],
-
-                // Detail Penumpang
-                'detail_penumpang' => $pembelian->detailPembelian->map(function($detail) {
-                    return [
-                        'penumpang' => strtoupper($detail->nama_penumpang),
-                        'kursi' => $detail->kursi->gerbong->nama_gerbong . ' ' . $detail->kursi->no_kursi,
-                        'kelas' => strtoupper($detail->kategori),
-                        'no_identitas' => $detail->nik,
-                    ];
-                }),
-
-                // Status
-                'status' => $pembelian->status,
-            ]
+            'data' => $this->formatReceiptData($pembelian),
         ]);
     }
 
-    /**
-     * Generate receipt HTML untuk print
-     */
-    public function receiptHtml($id)
+    private function formatReceiptData(PembelianTiket $pembelian): array
     {
-        $pembelian = PembelianTiket::with([
-            'penumpang.user',
-            'jadwalKereta.kereta',
-            'detailPembelian.kursi.gerbong'
-        ])->find($id);
+        return [
+            // Header Info
+            'perusahaan' => [
+                'nama' => 'PT SENRO INDONESIA (PERSERO)',
+                'npwp' => 'NPWP 01.000.016.4-083.000',
+            ],
 
-        if (!$pembelian) {
-            abort(404, 'Tiket tidak ditemukan');
-        }
+            // Detail Pembayaran
+            'detail_pembayaran' => [
+                'tanggal_pembayaran' => $pembelian->tanggal_pembelian->format('d M Y, H:i'),
+                'metode_pembayaran' => $pembelian->metode_pembayaran ?? 'ATM',
+                'kode_pemesanan' => $pembelian->kode_tiket,
+            ],
 
-        return view('receipt', compact('pembelian'));
+            // Rincian Tiket
+            'rincian' => [
+                'kereta' => $pembelian->jadwalKereta->kereta->nama_kereta
+                    . ' (' . $pembelian->jadwalKereta->kode_jadwal . ')',
+                'kelas' => strtoupper($pembelian->jadwalKereta->kereta->kelas_kereta),
+                'kode_pemesanan' => $pembelian->kode_tiket,
+                'penumpang' => $pembelian->detailPembelian->map(function ($detail) {
+                    return [
+                        'nama' => strtoupper($detail->nama_penumpang),
+                        'harga' => 'Rp. ' . number_format($detail->harga, 0, ',', '.'),
+                    ];
+                }),
+            ],
+
+            // Total Pembayaran
+            'total_pembayaran' => 'Rp. ' . number_format($pembelian->total_harga, 0, ',', '.'),
+            'ppn_info' => 'Tidak termasuk PPN.',
+            'ppn_disclaimer' =>
+                'PPN dibebaskan berdasarkan pasal 16B Undang Undang Harmonisasi Peraturan Perpajakan.',
+
+            // Barcode / Kode Pemesanan
+            'kode_pemesanan_display' => $pembelian->kode_tiket,
+
+            // Pemesanan Info
+            'pemesanan' => [
+                'nama' => strtoupper($pembelian->penumpang->user->username ?? 'N/A'),
+                'no_telepon' => $pembelian->penumpang->user->no_telepon ?? '0',
+                'email' => $pembelian->penumpang->user->email ?? 'N/A',
+                'tanggal_pesan' => $pembelian->tanggal_pembelian->format('d M Y, H:i:s'),
+                'pemesanan_melalui' => 'KAI Access',
+            ],
+
+            // Detail Perjalanan
+            'detail_pemesanan' => [
+                [
+                    'kereta' => strtoupper($pembelian->jadwalKereta->kereta->nama_kereta),
+                    'nomor_ka' => $pembelian->jadwalKereta->kode_jadwal,
+                    'keberangkatan' =>
+                        strtoupper($pembelian->jadwalKereta->asal_keberangkatan)
+                        . ' | ' . $pembelian->jadwalKereta->tanggal_berangkat->format('d M Y, H:i'),
+                    'tujuan' =>
+                        strtoupper($pembelian->jadwalKereta->tujuan_keberangkatan)
+                        . ' | ' . $pembelian->jadwalKereta->tanggal_kedatangan->format('d M Y, H:i'),
+                ]
+            ],
+
+            // Detail Penumpang
+            'detail_penumpang' => $pembelian->detailPembelian->map(function ($detail) {
+                return [
+                    'penumpang' => strtoupper($detail->nama_penumpang),
+                    'kursi' =>
+                        $detail->kursi->gerbong->nama_gerbong
+                        . ' ' . $detail->kursi->no_kursi,
+                    'kelas' => strtoupper($detail->kategori),
+                    'no_identitas' => $detail->nik,
+                ];
+            }),
+
+            // Status
+            'status' => $pembelian->status,
+        ];
     }
 
     /**
