@@ -279,7 +279,7 @@ class PembelianTiketController extends Controller
     }
 
     /**
-     * api/v1/pembelian-tiket/kode/{kode_tiket}/receipt
+     * GET api/v1/pembelian-tiket/kode/{kode_tiket}/receipt
      */
     public function receiptByKode(Request $request, $kode_tiket)
     {
@@ -446,7 +446,6 @@ class PembelianTiketController extends Controller
     }
 
     /**
-     * Display pembelian by kode_tiket
      * GET /api/pembelian-tiket/kode/{kode_tiket}
      */
     public function showByKode($kode_tiket)
@@ -467,7 +466,6 @@ class PembelianTiketController extends Controller
     }
 
     /**
-     * Cancel pembelian tiket
      * PUT /api/pembelian-tiket/{id}/cancel
      */
     public function cancel($id)
@@ -537,7 +535,6 @@ class PembelianTiketController extends Controller
     }
 
     /**
-     * Get available seats for jadwal
      * GET /api/pembelian-tiket/jadwal/{id_jadwal}/kursi-tersedia
      */
     public function getAvailableSeats($id_jadwal)
@@ -615,7 +612,6 @@ class PembelianTiketController extends Controller
     }
 
     /**
-     * Get statistics
      * GET /api/pembelian-tiket/statistics
      */
     public function statistics()
