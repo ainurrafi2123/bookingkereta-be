@@ -12,7 +12,6 @@ use Illuminate\Support\Facades\DB;
 class PembelianTiketController extends Controller
 {
     /**
-     * Display a listing of pembelian tiket
      * GET /api/pembelian-tiket
      */
     public function index(Request $request)
@@ -49,7 +48,6 @@ class PembelianTiketController extends Controller
     }
 
     /**
-     * Store a newly created pembelian tiket
      * POST /api/pembelian-tiket
      */
     public function store(Request $request)
@@ -246,7 +244,230 @@ class PembelianTiketController extends Controller
     }
 
     /**
-     * Display the specified pembelian tiket
+    * GET /api/v1/pembelian-tiket/{id}/receipt
+    */
+    public function receipt(Request $request, $id)
+    {
+        $pembelian = PembelianTiket::with([
+            'penumpang.user',
+            'jadwalKereta.kereta',
+            'detailPembelian.kursi.gerbong'
+        ])->find($id);
+
+        if (!$pembelian) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pembelian tiket tidak ditemukan'
+            ], 404);
+        }
+
+        // Cek kepemilikan tiket (user hanya bisa lihat receipt sendiri, kecuali petugas)
+        $user = $request->user();
+        
+        if ($user->role !== 'petugas' && $pembelian->id_penumpang !== $user->penumpang?->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Anda tidak memiliki akses ke tiket ini'
+            ], 403);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Receipt pembelian tiket',
+            'data' => [
+                // Header Info
+                'perusahaan' => [
+                    'nama' => 'PT KERETA API INDONESIA (PERSERO)',
+                    'npwp' => 'NPWP 01.000.016.4-083.000',
+                ],
+                
+                // Detail Pembayaran
+                'detail_pembayaran' => [
+                    'tanggal_pembayaran' => $pembelian->tanggal_pembelian->format('d M Y, H:i'),
+                    'metode_pembayaran' => $pembelian->metode_pembayaran ?? 'ATM',
+                    'kode_pemesanan' => $pembelian->kode_tiket,
+                ],
+
+                // Rincian Tiket
+                'rincian' => [
+                    'kereta' => $pembelian->jadwalKereta->kereta->nama_kereta . ' (' . $pembelian->jadwalKereta->kode_jadwal . ')',
+                    'kelas' => strtoupper($pembelian->jadwalKereta->kereta->kelas_kereta),
+                    'kode_pemesanan' => $pembelian->kode_tiket,
+                    'penumpang' => $pembelian->detailPembelian->map(function($detail) {
+                        return [
+                            'nama' => strtoupper($detail->nama_penumpang),
+                            'harga' => 'Rp. ' . number_format($detail->harga, 0, ',', '.'),
+                        ];
+                    }),
+                ],
+
+                // Total Pembayaran
+                'total_pembayaran' => 'Rp. ' . number_format($pembelian->total_harga, 0, ',', '.'),
+                'ppn_info' => 'Tidak termasuk PPN.',
+                'ppn_disclaimer' => 'PPN dibebaskan berdasarkan pasal 16B Undang Undang Harmonisasi Peraturan Perpajakan.',
+
+                // Kode Pemesanan (untuk barcode)
+                'kode_pemesanan_display' => $pembelian->kode_tiket,
+
+                // Pemesanan Info
+                'pemesanan' => [
+                    'nama' => strtoupper($pembelian->penumpang->user->username ?? 'N/A'),
+                    'no_telepon' => $pembelian->penumpang->user->no_telepon ?? '0',
+                    'email' => $pembelian->penumpang->user->email ?? 'N/A',
+                    'tanggal_pesan' => $pembelian->tanggal_pembelian->format('d M Y, H:i:s'),
+                    'pemesanan_melalui' => 'KAI Access',
+                ],
+
+                // Detail Pemesanan (Perjalanan)
+                'detail_pemesanan' => [
+                    [
+                        'kereta' => strtoupper($pembelian->jadwalKereta->kereta->nama_kereta),
+                        'nomor_ka' => $pembelian->jadwalKereta->kode_jadwal,
+                        'keberangkatan' => strtoupper($pembelian->jadwalKereta->asal_keberangkatan) . ' | ' . 
+                                        $pembelian->jadwalKereta->tanggal_berangkat->format('d M Y, H:i'),
+                        'tujuan' => strtoupper($pembelian->jadwalKereta->tujuan_keberangkatan) . ' | ' . 
+                                $pembelian->jadwalKereta->tanggal_kedatangan->format('d M Y, H:i'),
+                    ]
+                ],
+
+                // Detail Penumpang
+                'detail_penumpang' => $pembelian->detailPembelian->map(function($detail) {
+                    return [
+                        'penumpang' => strtoupper($detail->nama_penumpang),
+                        'kursi' => $detail->kursi->gerbong->nama_gerbong . ' ' . $detail->kursi->no_kursi,
+                        'kelas' => strtoupper($detail->kategori),
+                        'no_identitas' => $detail->nik,
+                    ];
+                }),
+
+                // Status
+                'status' => $pembelian->status,
+            ]
+        ]);
+    }
+
+    /**
+     * api/v1/pembelian-tiket/kode/{kode_tiket}/receipt
+     */
+    public function receiptByKode(Request $request, $kode_tiket)
+    {
+        $pembelian = PembelianTiket::with([
+            'penumpang.user',
+            'jadwalKereta.kereta',
+            'detailPembelian.kursi.gerbong'
+        ])->where('kode_tiket', $kode_tiket)->first();
+
+        if (!$pembelian) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Tiket dengan kode ' . $kode_tiket . ' tidak ditemukan'
+            ], 404);
+        }
+
+        // Cek kepemilikan tiket (user hanya bisa lihat receipt sendiri, kecuali petugas)
+        $user = $request->user();
+        
+        if ($user->role !== 'petugas' && $pembelian->id_penumpang !== $user->penumpang?->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Anda tidak memiliki akses ke tiket ini'
+            ], 403);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Receipt pembelian tiket',
+            'data' => [
+                // Header Info
+                'perusahaan' => [
+                    'nama' => 'PT KERETA API INDONESIA (PERSERO)',
+                    'npwp' => 'NPWP 01.000.016.4-083.000',
+                ],
+                
+                // Detail Pembayaran
+                'detail_pembayaran' => [
+                    'tanggal_pembayaran' => $pembelian->tanggal_pembelian->format('d M Y, H:i'),
+                    'metode_pembayaran' => $pembelian->metode_pembayaran ?? 'ATM',
+                    'kode_pemesanan' => $pembelian->kode_tiket,
+                ],
+
+                // Rincian Tiket
+                'rincian' => [
+                    'kereta' => $pembelian->jadwalKereta->kereta->nama_kereta . ' (' . $pembelian->jadwalKereta->kode_jadwal . ')',
+                    'kelas' => strtoupper($pembelian->jadwalKereta->kereta->kelas_kereta),
+                    'kode_pemesanan' => $pembelian->kode_tiket,
+                    'penumpang' => $pembelian->detailPembelian->map(function($detail) {
+                        return [
+                            'nama' => strtoupper($detail->nama_penumpang),
+                            'harga' => 'Rp. ' . number_format($detail->harga, 0, ',', '.'),
+                        ];
+                    }),
+                ],
+
+                // Total Pembayaran
+                'total_pembayaran' => 'Rp. ' . number_format($pembelian->total_harga, 0, ',', '.'),
+                'ppn_info' => 'Tidak termasuk PPN.',
+                'ppn_disclaimer' => 'PPN dibebaskan berdasarkan pasal 16B Undang Undang Harmonisasi Peraturan Perpajakan.',
+
+                // Kode Pemesanan (untuk barcode)
+                'kode_pemesanan_display' => $pembelian->kode_tiket,
+
+                // Pemesanan Info
+                'pemesanan' => [
+                    'nama' => strtoupper($pembelian->penumpang->user->username ?? 'N/A'),
+                    'no_telepon' => $pembelian->penumpang->user->no_telepon ?? '0',
+                    'email' => $pembelian->penumpang->user->email ?? 'N/A',
+                    'tanggal_pesan' => $pembelian->tanggal_pembelian->format('d M Y, H:i:s'),
+                    'pemesanan_melalui' => 'KAI Access',
+                ],
+
+                // Detail Pemesanan (Perjalanan)
+                'detail_pemesanan' => [
+                    [
+                        'kereta' => strtoupper($pembelian->jadwalKereta->kereta->nama_kereta),
+                        'nomor_ka' => $pembelian->jadwalKereta->kode_jadwal,
+                        'keberangkatan' => strtoupper($pembelian->jadwalKereta->asal_keberangkatan) . ' | ' . 
+                                        $pembelian->jadwalKereta->tanggal_berangkat->format('d M Y, H:i'),
+                        'tujuan' => strtoupper($pembelian->jadwalKereta->tujuan_keberangkatan) . ' | ' . 
+                                $pembelian->jadwalKereta->tanggal_kedatangan->format('d M Y, H:i'),
+                    ]
+                ],
+
+                // Detail Penumpang
+                'detail_penumpang' => $pembelian->detailPembelian->map(function($detail) {
+                    return [
+                        'penumpang' => strtoupper($detail->nama_penumpang),
+                        'kursi' => $detail->kursi->gerbong->nama_gerbong . ' ' . $detail->kursi->no_kursi,
+                        'kelas' => strtoupper($detail->kategori),
+                        'no_identitas' => $detail->nik,
+                    ];
+                }),
+
+                // Status
+                'status' => $pembelian->status,
+            ]
+        ]);
+    }
+
+    /**
+     * Generate receipt HTML untuk print
+     */
+    public function receiptHtml($id)
+    {
+        $pembelian = PembelianTiket::with([
+            'penumpang.user',
+            'jadwalKereta.kereta',
+            'detailPembelian.kursi.gerbong'
+        ])->find($id);
+
+        if (!$pembelian) {
+            abort(404, 'Tiket tidak ditemukan');
+        }
+
+        return view('receipt', compact('pembelian'));
+    }
+
+    /**
      * GET /api/pembelian-tiket/{id}
      */
     public function show($id)

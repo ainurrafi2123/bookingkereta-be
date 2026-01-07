@@ -203,9 +203,11 @@ Route::prefix('v1')->group(function () {
                     
                     // Custom endpoints - spesifik di atas
                     Route::get('/kode/{kode_tiket}', 'showByKode')->name('show-by-kode');
+                    Route::get('/kode/{kode_tiket}/receipt', 'receiptByKode')->name('receipt-by-kode'); 
                     Route::get('/jadwal/{id_jadwal}/kursi-tersedia', 'getAvailableSeats')->name('available-seats');
                     
                     Route::get('/{id}', 'show')->name('show');
+                    Route::get('/{id}/receipt', 'receipt')->name('receipt');
                     Route::put('/{id}/cancel', 'cancel')->name('cancel');
                 });
 
