@@ -22,13 +22,15 @@ class User extends Authenticatable
         'password',
     ];
 
-    public function petugas()
-    {
-        return $this->hasOne(Petugas::class);
-    }
-
+ // Relasi ke tabel penumpang
     public function penumpang()
     {
-        return $this->hasOne(Penumpang::class);
+        return $this->hasOne(Penumpang::class, 'user_id');
+    }
+
+    // Relasi ke tabel petugas
+    public function petugas()
+    {
+        return $this->hasOne(Petugas::class, 'user_id');
     }
 }

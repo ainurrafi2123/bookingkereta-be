@@ -13,10 +13,34 @@ class JadwalKeretaController extends Controller
     /**
      * GET all jadwal
      */
-    public function index()
+    public function index(Request $request)
     {
-        $jadwal = JadwalKereta::with('kereta')->get();
-        return response()->json($jadwal);
+        $this->autoUpdateSchedules();
+
+        $query = JadwalKereta::with('kereta');
+
+        //  Filter by kereta (untuk dropdown jadwal di halaman gerbong)
+        if ($request->has('id_kereta')) {
+            $query->where('id_kereta', $request->id_kereta);
+        }
+
+        //  Filter by status (optional)
+        if ($request->has('status') && $request->status !== 'all') {
+            $query->where('status', $request->status);
+        }
+
+        // Only filter by time if requested or for specific scenarios
+        // For dashboard management, we often want to see past schedules (completed)
+        if ($request->has('only_upcoming') && $request->only_upcoming == 'true') {
+            $query->where('tanggal_berangkat', '>=', now());
+        }
+
+        // Order by tanggal
+        $query->orderBy('tanggal_berangkat', 'asc');
+
+        $jadwals = $query->get();
+
+        return response()->json($jadwals);
     }
 
     /**
@@ -24,6 +48,8 @@ class JadwalKeretaController extends Controller
      */
     public function show($id)
     {
+        $this->autoUpdateSchedules();
+
         $jadwal = JadwalKereta::with('kereta')->findOrFail($id);
 
         return response()->json($jadwal);
@@ -111,5 +137,14 @@ class JadwalKeretaController extends Controller
         return response()->json([
             'message' => 'Jadwal kereta berhasil dihapus'
         ]);
+    }
+    /**
+     * Auto update status active -> completed jika waktu sudah lewat
+     */
+    private function autoUpdateSchedules()
+    {
+        JadwalKereta::where('status', 'active')
+            ->where('tanggal_kedatangan', '<', now())
+            ->update(['status' => 'completed']);
     }
 }

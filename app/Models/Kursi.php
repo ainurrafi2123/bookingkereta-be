@@ -16,7 +16,6 @@ class Kursi extends Model
         'no_kursi',
         'baris',
         'kolom',
-        'status',
     ];
 
 

@@ -8,6 +8,7 @@ use App\Models\JadwalKereta;
 use App\Models\Kursi;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class PembelianTiketController extends Controller
 {
@@ -21,6 +22,18 @@ class PembelianTiketController extends Controller
             'jadwalKereta.kereta',
             'detailPembelian.kursi'
         ]);
+
+        // Filter by authenticated user (if not petugas)
+        $user = $request->user();
+        if ($user && $user->role !== 'petugas') {
+            $penumpang = $user->penumpang;
+            if ($penumpang) {
+                $query->where('id_penumpang', $penumpang->id);
+            } else {
+                // If user has no penumpang record, they should see nothing
+                $query->where('id_penumpang', -1);
+            }
+        }
         
         // Filter by status (optional)
         if ($request->has('status')) {
@@ -36,10 +49,68 @@ class PembelianTiketController extends Controller
         if ($request->has('id_jadwal_kereta')) {
             $query->where('id_jadwal_kereta', $request->id_jadwal_kereta);
         }
+
+        // Filter by tanggal (specific date: YYYY-MM-DD)
+        if ($request->has('tanggal') && $request->tanggal) {
+            $query->whereDate('tanggal_pembelian', $request->tanggal);
+        }
+
+        // Filter by bulan (specific month: YYYY-MM)
+        if ($request->has('bulan') && $request->bulan) {
+            $date = \Carbon\Carbon::createFromFormat('Y-m', $request->bulan);
+            $query->whereYear('tanggal_pembelian', $date->year)
+                  ->whereMonth('tanggal_pembelian', $date->month);
+        }
         
         // Pagination
         $perPage = $request->get('per_page', 15);
         $pembelian = $query->latest()->paginate($perPage);
+
+        // Transform data untuk frontend
+        $pembelian->through(function ($item) {
+            return [
+                'id' => $item->id,
+                'kode_tiket' => $item->kode_tiket,
+                'tanggal_pembelian' => $item->tanggal_pembelian->setTimezone('Asia/Jakarta')->format('d-m-Y H:i'),
+                'status' => $item->status,
+                'total_harga' => number_format($item->total_harga, 0, ',', '.'),
+                'metode_pembayaran' => $item->metode_pembayaran,
+                
+                // Include original relations for BookingsDataTable
+                'pembeli' => $item->penumpang ? [
+                    'id' => $item->penumpang->id,
+                    'nama_penumpang' => $item->penumpang->nama_penumpang,
+                    'nik' => $item->penumpang->nik,
+                    'no_hp' => $item->penumpang->no_hp,
+                ] : null,
+                
+                'jadwal_kereta' => $item->jadwalKereta ? [
+                    'id' => $item->jadwalKereta->id,
+                    'kode_jadwal' => $item->jadwalKereta->kode_jadwal,
+                    'asal_keberangkatan' => $item->jadwalKereta->asal_keberangkatan,
+                    'tujuan_keberangkatan' => $item->jadwalKereta->tujuan_keberangkatan,
+                    'tanggal_berangkat' => $item->jadwalKereta->tanggal_berangkat->setTimezone('Asia/Jakarta')->format('d-m-Y H:i'),
+                    'tanggal_kedatangan' => $item->jadwalKereta->tanggal_kedatangan->setTimezone('Asia/Jakarta')->format('d-m-Y H:i'),
+                    'kereta' => $item->jadwalKereta->kereta ? [
+                        'id' => $item->jadwalKereta->kereta->id,
+                        'nama_kereta' => $item->jadwalKereta->kereta->nama_kereta,
+                        'kode_kereta' => $item->jadwalKereta->kereta->kode_kereta,
+                        'kelas_kereta' => $item->jadwalKereta->kereta->kelas_kereta,
+                    ] : null,
+                ] : null,
+                
+                // Simplified jadwal for history page
+                'jadwal' => [
+                    'kereta' => $item->jadwalKereta->kereta->nama_kereta ?? 'N/A',
+                    'kelas' => $item->jadwalKereta->kereta->kelas_kereta ?? 'N/A',
+                    'asal' => $item->jadwalKereta->asal_keberangkatan,
+                    'tujuan' => $item->jadwalKereta->tujuan_keberangkatan,
+                    'tanggal_berangkat' => $item->jadwalKereta->tanggal_berangkat->setTimezone('Asia/Jakarta')->format('d-m-Y H:i'),
+                    'tanggal_tiba' => $item->jadwalKereta->tanggal_kedatangan->setTimezone('Asia/Jakarta')->format('d-m-Y H:i'),
+                ],
+                'jumlah_penumpang' => $item->detailPembelian->count(),
+            ];
+        });
         
         return response()->json([
             'message' => 'Data pembelian tiket',
@@ -56,6 +127,7 @@ class PembelianTiketController extends Controller
         $validated = $request->validate([
             'id_penumpang' => 'required|exists:penumpang,id',
             'id_jadwal_kereta' => 'required|exists:jadwal_kereta,id',
+            'metode_pembayaran' => 'nullable|string',
             'penumpang' => 'required|array|min:1|max:10',
             'penumpang.*.nik' => [
                 'required', 
@@ -90,55 +162,93 @@ class PembelianTiketController extends Controller
         ]);
 
         DB::beginTransaction();
-        try {
-            // 1. Get jadwal & validasi
-            $jadwal = JadwalKereta::with('kereta.gerbong')
-                ->findOrFail($validated['id_jadwal_kereta']);
-            
-            // Cek jadwal masih aktif
-            if ($jadwal->status !== 'active') {
-                return response()->json([
-                    'message' => 'Jadwal tidak aktif'
-                ], 400);
-            }
-            
-            // Cek jadwal belum kedaluwarsa
-            if (now()->greaterThan($jadwal->tanggal_berangkat)) {
-                return response()->json([
-                    'message' => 'Jadwal sudah lewat'
-                ], 400);
-            }
+    try {
+        // 1. Get jadwal & validasi ( EAGER LOAD gerbong)
+        $jadwal = JadwalKereta::with(['kereta.gerbong'])
+            ->findOrFail($validated['id_jadwal_kereta']);
+        
+        //  DEBUG: Log relasi
+        Log::info('Jadwal loaded', [
+            'jadwal_id' => $jadwal->id,
+            'kereta_id' => $jadwal->kereta->id ?? null,
+            'gerbong_count' => $jadwal->kereta->gerbong->count() ?? 0,
+            'gerbong_ids' => $jadwal->kereta->gerbong->pluck('id')->toArray() ?? [],
+        ]);
+        
+        // Cek jadwal masih aktif
+        if ($jadwal->status !== 'active') {
+            return response()->json([
+                'message' => 'Jadwal tidak aktif'
+            ], 400);
+        }
+        
+        // Cek jadwal belum kedaluwarsa
+        if (now()->greaterThan($jadwal->tanggal_berangkat)) {
+            return response()->json([
+                'message' => 'Jadwal sudah lewat'
+            ], 400);
+        }
 
-            // 2. Collect kursi IDs
-            $kursiIds = collect($validated['penumpang'])->pluck('id_kursi');
-            
-            // 4. Cek double booking (kursi sudah dipesan orang lain)
-            $existingBooking = DetailPembelianTiket::whereIn('id_kursi', $kursiIds)
-                ->whereHas('pembelianTiket', function($q) use ($validated) {
-                    $q->where('id_jadwal_kereta', $validated['id_jadwal_kereta'])
-                      ->where('status', 'booked');
-                })
-                ->exists();
-            
-            if ($existingBooking) {
-                return response()->json([
-                    'message' => 'Beberapa kursi sudah dipesan penumpang lain'
-                ], 409);
-            }
+        // 2. Collect kursi IDs
+        $kursiIds = collect($validated['penumpang'])->pluck('id_kursi');
+        
+        //  DEBUG: Log kursi yang dipilih
+        Log::info('Kursi yang dipilih', [
+            'kursi_ids' => $kursiIds->toArray(),
+        ]);
+        
+        // 3. Cek double booking (kursi sudah dipesan untuk JADWAL INI)
+        $existingBooking = DetailPembelianTiket::whereIn('id_kursi', $kursiIds)
+            ->whereHas('pembelianTiket', function($q) use ($validated) {
+                $q->where('id_jadwal_kereta', $validated['id_jadwal_kereta'])
+                  ->where('status', 'booked');
+            })
+            ->exists();
+        
+        if ($existingBooking) {
+            return response()->json([
+                'message' => 'Beberapa kursi sudah dipesan penumpang lain untuk jadwal ini'
+            ], 409);
+        }
 
-            // 3. Validasi kursi tersedia & di gerbong yang tepat
-            $gerbongIds = $jadwal->kereta->gerbong->pluck('id');
+        // 4. Validasi kursi ada di gerbong yang tepat
+        $gerbongIds = $jadwal->kereta->gerbong->pluck('id');
+        
+        //  DEBUG: Log gerbong IDs
+        Log::info('Gerbong IDs dari kereta', [
+            'gerbong_ids' => $gerbongIds->toArray(),
+        ]);
+        
+        $validKursi = Kursi::whereIn('id', $kursiIds)
+            ->whereIn('id_gerbong', $gerbongIds)
+            ->get();
+        
+        //  DEBUG: Log hasil validasi
+        Log::info('Validasi kursi', [
+            'kursi_ids_requested' => $kursiIds->toArray(),
+            'valid_kursi_ids' => $validKursi->pluck('id')->toArray(),
+            'valid_count' => $validKursi->count(),
+            'expected_count' => $kursiIds->count(),
+        ]);
+        
+        if ($validKursi->count() !== $kursiIds->count()) {
+            //  DEBUG: Kursi mana yang tidak valid?
+            $invalidKursiIds = $kursiIds->diff($validKursi->pluck('id'));
             
-            $validKursi = Kursi::whereIn('id', $kursiIds)
-                ->whereIn('id_gerbong', $gerbongIds)
-                ->where('status', 'available')
-                ->pluck('id');
+            Log::error('Kursi tidak valid', [
+                'invalid_kursi_ids' => $invalidKursiIds->toArray(),
+            ]);
             
-            if ($validKursi->count() !== $kursiIds->count()) {
-                return response()->json([
-                    'message' => 'Beberapa kursi tidak tersedia atau tidak valid untuk jadwal ini'
-                ], 400);
-            }
+            return response()->json([
+                'message' => 'Beberapa kursi tidak valid untuk jadwal ini',
+                'debug' => [
+                    'kursi_ids_requested' => $kursiIds->toArray(),
+                    'valid_kursi_ids' => $validKursi->pluck('id')->toArray(),
+                    'invalid_kursi_ids' => $invalidKursiIds->toArray(),
+                    'gerbong_ids_kereta' => $gerbongIds->toArray(),
+                ]
+            ], 400);
+        }
 
             // 5. Hitung total harga
             $totalHarga = 0;
@@ -174,17 +284,13 @@ class PembelianTiketController extends Controller
                 'id_jadwal_kereta' => $validated['id_jadwal_kereta'],
                 'total_harga' => $totalHarga,
                 'status' => 'booked',
+                'metode_pembayaran' => $request->metode_pembayaran,
             ]);
 
-            // 8. Create detail pembelian untuk setiap penumpang
+            // 8. Create detail pembelian
             foreach ($detailData as $detail) {
                 $pembelian->detailPembelian()->create($detail);
             }
-
-            // 9. Update status kursi jadi 'booked'
-            Kursi::whereIn('id', $kursiIds)->update([
-                'status' => 'booked'
-            ]);
 
             // 9b. Update kuota jadwal
             $jumlahKursi = count($kursiIds);
@@ -206,7 +312,7 @@ class PembelianTiketController extends Controller
                 'message' => 'Booking tiket berhasil',
                 'data' => [
                     'kode_tiket' => $pembelian->kode_tiket,
-                    'tanggal_pembelian' => $pembelian->tanggal_pembelian->format('d-m-Y H:i'),
+                    'tanggal_pembelian' => $pembelian->tanggal_pembelian->setTimezone('Asia/Jakarta')->format('d-m-Y H:i'),
                     'status' => $pembelian->status,
                     'total_harga' => number_format($pembelian->total_harga, 0, ',', '.'),
                     'jumlah_penumpang' => $pembelian->detailPembelian->count(),
@@ -214,7 +320,7 @@ class PembelianTiketController extends Controller
                         'kereta' => $pembelian->jadwalKereta->kereta->nama_kereta,
                         'kelas' => $pembelian->jadwalKereta->kereta->kelas_kereta,
                         'rute' => $pembelian->jadwalKereta->asal_keberangkatan . ' - ' . $pembelian->jadwalKereta->tujuan_keberangkatan,
-                        'tanggal_berangkat' => $pembelian->jadwalKereta->tanggal_berangkat->format('d-m-Y H:i'),
+                        'tanggal_berangkat' => $pembelian->jadwalKereta->tanggal_berangkat->setTimezone('Asia/Jakarta')->format('d-m-Y H:i'),
                     ],
                     'penumpang' => $pembelian->detailPembelian->map(function($detail) {
                         return [
@@ -234,8 +340,14 @@ class PembelianTiketController extends Controller
                 'message' => 'Validasi gagal',
                 'errors' => $e->errors()
             ], 422);
-        } catch (\Exception $e) {
+         } catch (\Exception $e) {
             DB::rollback();
+            
+            Log::error('Booking error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            
             return response()->json([
                 'message' => 'Gagal membuat booking',
                 'error' => $e->getMessage()
@@ -324,7 +436,7 @@ class PembelianTiketController extends Controller
 
             // Detail Pembayaran
             'detail_pembayaran' => [
-                'tanggal_pembayaran' => $pembelian->tanggal_pembelian->format('d M Y, H:i'),
+                'tanggal_pembayaran' => $pembelian->tanggal_pembelian->setTimezone('Asia/Jakarta')->format('d M Y, H:i'),
                 'metode_pembayaran' => $pembelian->metode_pembayaran ?? 'ATM',
                 'kode_pemesanan' => $pembelian->kode_tiket,
             ],
@@ -355,9 +467,9 @@ class PembelianTiketController extends Controller
             // Pemesanan Info
             'pemesanan' => [
                 'nama' => strtoupper($pembelian->penumpang->user->username ?? 'N/A'),
-                'no_telepon' => $pembelian->penumpang->user->no_telepon ?? '0',
+                'no_telepon' => $pembelian->penumpang->no_hp ?? '0',
                 'email' => $pembelian->penumpang->user->email ?? 'N/A',
-                'tanggal_pesan' => $pembelian->tanggal_pembelian->format('d M Y, H:i:s'),
+                'tanggal_pesan' => $pembelian->tanggal_pembelian->setTimezone('Asia/Jakarta')->format('d M Y, H:i:s'),
                 'pemesanan_melalui' => 'KAI Access',
             ],
 
@@ -368,10 +480,10 @@ class PembelianTiketController extends Controller
                     'nomor_ka' => $pembelian->jadwalKereta->kode_jadwal,
                     'keberangkatan' =>
                         strtoupper($pembelian->jadwalKereta->asal_keberangkatan)
-                        . ' | ' . $pembelian->jadwalKereta->tanggal_berangkat->format('d M Y, H:i'),
+                        . ' | ' . $pembelian->jadwalKereta->tanggal_berangkat->setTimezone('Asia/Jakarta')->format('d M Y, H:i'),
                     'tujuan' =>
                         strtoupper($pembelian->jadwalKereta->tujuan_keberangkatan)
-                        . ' | ' . $pembelian->jadwalKereta->tanggal_kedatangan->format('d M Y, H:i'),
+                        . ' | ' . $pembelian->jadwalKereta->tanggal_kedatangan->setTimezone('Asia/Jakarta')->format('d M Y, H:i'),
                 ]
             ],
 
@@ -400,7 +512,7 @@ class PembelianTiketController extends Controller
         $pembelian = PembelianTiket::with([
             'penumpang.user',
             'jadwalKereta.kereta',
-            'detailPembelian.kursi'
+            'detailPembelian.kursi.gerbong'
         ])->find($id);
 
         if (!$pembelian) {
@@ -414,24 +526,28 @@ class PembelianTiketController extends Controller
             'data' => [
                 'id' => $pembelian->id,
                 'kode_tiket' => $pembelian->kode_tiket,
-                'tanggal_pembelian' => $pembelian->tanggal_pembelian->format('d-m-Y H:i'),
+                'tanggal_pembelian' => $pembelian->tanggal_pembelian->setTimezone('Asia/Jakarta')->format('d-m-Y H:i'),
                 'status' => $pembelian->status,
                 'total_harga' => number_format($pembelian->total_harga, 0, ',', '.'),
                 'pemesan' => [
+                    'id' => $pembelian->id_penumpang,
                     'nama' => $pembelian->penumpang->user->username ?? 'N/A',
                     'email' => $pembelian->penumpang->user->email ?? 'N/A',
                 ],
                 'jadwal' => [
+                    'id' => $pembelian->id_jadwal_kereta, 
                     'kode' => $pembelian->jadwalKereta->kode_jadwal,
                     'kereta' => $pembelian->jadwalKereta->kereta->nama_kereta,
                     'kelas' => $pembelian->jadwalKereta->kereta->kelas_kereta,
                     'asal' => $pembelian->jadwalKereta->asal_keberangkatan,
                     'tujuan' => $pembelian->jadwalKereta->tujuan_keberangkatan,
-                    'tanggal_berangkat' => $pembelian->jadwalKereta->tanggal_berangkat->format('d-m-Y H:i'),
-                    'tanggal_tiba' => $pembelian->jadwalKereta->tanggal_kedatangan->format('d-m-Y H:i'),
+                    'tanggal_berangkat' => $pembelian->jadwalKereta->tanggal_berangkat->setTimezone('Asia/Jakarta')->format('d-m-Y H:i'),
+                    'tanggal_tiba' => $pembelian->jadwalKereta->tanggal_kedatangan->setTimezone('Asia/Jakarta')->format('d-m-Y H:i'),
                 ],
                 'penumpang' => $pembelian->detailPembelian->map(function($detail) {
                     return [
+                        'id_detail' => $detail->id,
+                        'id_kursi' => $detail->id_kursi, //  TAMBAHKAN
                         'nama' => $detail->nama_penumpang,
                         'nik' => $detail->nik,
                         'kategori' => ucfirst($detail->kategori),
@@ -482,14 +598,15 @@ class PembelianTiketController extends Controller
                 ], 400);
             }
 
-            // Validasi: Cek apakah masih bisa cancel
-            // Misal: minimal 24 jam sebelum keberangkatan
-            $jamSebelumBerangkat = now()->diffInHours($pembelian->jadwalKereta->tanggal_berangkat, false);
+            // Validasi: Cek apakah sudah lewat 24 jam sejak pembelian
+            $jamSejakPembelian = now()->diffInHours($pembelian->tanggal_pembelian, false);
             
-            if ($jamSebelumBerangkat < 24) {
+            if ($jamSejakPembelian < 24) {
+                $jamTersisa = 24 - $jamSejakPembelian;
                 return response()->json([
-                    'message' => 'Tidak bisa membatalkan tiket kurang dari 24 jam sebelum keberangkatan',
-                    'jam_tersisa' => round($jamSebelumBerangkat, 1)
+                    'message' => 'Pembatalan tiket hanya dapat dilakukan setelah 24 jam dari waktu pembelian',
+                    'jam_sejak_pembelian' => round($jamSejakPembelian, 1),
+                    'jam_tersisa' => round($jamTersisa, 1)
                 ], 400);
             }
 
@@ -497,13 +614,8 @@ class PembelianTiketController extends Controller
             $pembelian->update([
                 'status' => 'cancelled'
             ]);
-
-            // Kembalikan status kursi jadi 'available'
-            $kursiIds = $pembelian->detailPembelian->pluck('id_kursi');
-            Kursi::whereIn('id', $kursiIds)->update([
-                'status' => 'available'
-            ]);
-
+            
+            // Update kuota jadwal
             $jumlahKursi = $pembelian->detailPembelian->count();
             $jadwal = $pembelian->jadwalKereta;
             $jadwal->increment('kursi_tersedia', $jumlahKursi);
@@ -516,15 +628,9 @@ class PembelianTiketController extends Controller
                 'data' => [
                     'kode_tiket' => $pembelian->kode_tiket,
                     'status' => $pembelian->status,
-                    'kursi_dikembalikan' => $kursiIds->count()
+                    'kursi_dikembalikan' => $jumlahKursi
                 ]
             ]);
-
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            DB::rollback();
-            return response()->json([
-                'message' => 'Pembelian tiket tidak ditemukan'
-            ], 404);
         } catch (\Exception $e) {
             DB::rollback();
             return response()->json([
@@ -540,31 +646,50 @@ class PembelianTiketController extends Controller
     public function getAvailableSeats($id_jadwal)
     {
         try {
-            $jadwal = JadwalKereta::with(['kereta.gerbong.kursi' => function($query) {
-                $query->where('status', 'available')
-                      ->orderBy('baris')
-                      ->orderBy('kolom');
-            }])->findOrFail($id_jadwal);
+            // 1. Get jadwal with train and carriages
+            $jadwal = JadwalKereta::with(['kereta.gerbong.kursi'])->findOrFail($id_jadwal);
 
-            // Group kursi by gerbong
+            // 2. Get all booked kursi IDs for this schedule
+            // A seat is considered booked if it exists in detail_pembelian_tiket for this schedule
+            // and the parent booking is not cancelled.
+            $bookedKursiIds = DetailPembelianTiket::whereHas('pembelianTiket', function($query) use ($id_jadwal) {
+                $query->where('id_jadwal_kereta', $id_jadwal)
+                      ->where('status', '!=', 'cancelled');
+            })->pluck('id_kursi')->toArray();
+
+            // 3. Group kursi by gerbong and determine status
             $kursiByGerbong = [];
             
             foreach ($jadwal->kereta->gerbong as $gerbong) {
+                // Manually map seats and determine status
+                $mappedKursi = $gerbong->kursi->map(function($kursi) use ($bookedKursiIds) {
+                    $isBooked = in_array($kursi->id, $bookedKursiIds);
+                    return [
+                        'id' => $kursi->id,
+                        'no_kursi' => $kursi->no_kursi,
+                        'baris' => $kursi->baris,
+                        'kolom' => $kursi->kolom,
+                        'status' => $isBooked ? 'booked' : 'available',
+                    ];
+                })->toArray();
+
+                // Sort mapped kursi by baris and kolom
+                usort($mappedKursi, function($a, $b) {
+                    if ($a['baris'] === $b['baris']) {
+                        return $a['kolom'] <=> $b['kolom'];
+                    }
+                    return $a['baris'] <=> $b['baris'];
+                });
+
+                $availableCount = collect($mappedKursi)->where('status', 'available')->count();
+
                 $kursiByGerbong[] = [
                     'id_gerbong' => $gerbong->id,
                     'nama_gerbong' => $gerbong->nama_gerbong,
                     'kelas' => $gerbong->kelas_gerbong,
                     'kuota_total' => $gerbong->kuota,
-                    'kursi_tersedia' => $gerbong->kursi->count(),
-                    'kursi' => $gerbong->kursi->map(function($kursi) {
-                        return [
-                            'id' => $kursi->id,
-                            'no_kursi' => $kursi->no_kursi,
-                            'baris' => $kursi->baris,
-                            'kolom' => $kursi->kolom,
-                            'status' => $kursi->status,
-                        ];
-                    })
+                    'kursi_tersedia' => $availableCount,
+                    'kursi' => $mappedKursi
                 ];
             }
 

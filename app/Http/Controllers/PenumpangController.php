@@ -36,7 +36,7 @@ class PenumpangController extends Controller
         ]);
     }
 
-        // GET penumpang yang terhubung dengan id
+    // GET penumpang yang terhubung dengan id
     public function myPenumpang(Request $request)
     {
         $userId = $request->user()->id;
@@ -54,7 +54,7 @@ class PenumpangController extends Controller
         ]);
     }
 
-
+    // GET penumpang milik user yang login
     public function me(Request $request): JsonResponse
     {
         $penumpang = $request->user()
@@ -74,8 +74,55 @@ class PenumpangController extends Controller
         ]);
     }
 
+    //  UPDATE penumpang milik user yang login (NEW)
+    public function updateMe(Request $request): JsonResponse
+    {
+        $penumpang = $request->user()
+            ->penumpang()
+            ->first();
 
-    // UPDATE penumpang
+        if (!$penumpang) {
+            return response()->json([
+                'message' => 'Profil penumpang tidak ditemukan'
+            ], 404);
+        }
+
+        $validated = $request->validate([
+            'nama_penumpang' => 'sometimes|nullable|string|max:255',
+            'nik'            => 'sometimes|nullable|string|max:50|unique:penumpang,nik,' . $penumpang->id,
+            'alamat'         => 'sometimes|nullable|string',
+            'no_hp'          => 'sometimes|nullable|string|max:20',
+        ]);
+
+        $penumpang->update($validated);
+
+        return response()->json([
+            'message' => 'Data penumpang berhasil diperbarui',
+            'data' => $penumpang->fresh(['user'])
+        ]);
+    }
+
+    //  DELETE penumpang milik user yang login (NEW)
+    public function destroyMe(Request $request): JsonResponse
+    {
+        $penumpang = $request->user()
+            ->penumpang()
+            ->first();
+
+        if (!$penumpang) {
+            return response()->json([
+                'message' => 'Profil penumpang tidak ditemukan'
+            ], 404);
+        }
+
+        $penumpang->delete();
+
+        return response()->json([
+            'message' => 'Profil penumpang berhasil dihapus'
+        ]);
+    }
+
+    // UPDATE penumpang by ID (untuk petugas)
     public function update(Request $request, $id): JsonResponse
     {
         $penumpang = Penumpang::find($id);
@@ -101,7 +148,7 @@ class PenumpangController extends Controller
         ]);
     }
 
-    // DELETE penumpang
+    // DELETE penumpang by ID (untuk petugas)
     public function destroy($id): JsonResponse
     {
         $penumpang = Penumpang::find($id);

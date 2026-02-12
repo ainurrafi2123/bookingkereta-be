@@ -11,15 +11,28 @@ class UserController extends Controller
 {
     public function index()
     {
-        return response()->json(User::all(), 200);
+        $users = User::all()->map(function ($user) {
+            // Load relasi sesuai role
+            if ($user->role === 'penumpang') {
+                $user->load('penumpang');
+            } elseif ($user->role === 'petugas') {
+                $user->load('petugas');
+            }
+            return $user;
+        });
+
+        return response()->json($users, 200);
     }
 
     public function show($id)
     {
-        $user = User::find($id);
+        // Eager load penumpang dan petugas
+        $user = User::with(['penumpang', 'petugas'])->find($id);
 
         if (!$user) {
-            return response()->json(['message' => 'User tidak ditemukan'], 404);
+            return response()->json([
+                'message' => 'User tidak ditemukan'
+            ], 404);
         }
 
         return response()->json($user, 200);

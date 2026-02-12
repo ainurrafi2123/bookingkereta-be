@@ -3,24 +3,90 @@
 namespace App\Http\Controllers;
 
 use App\Models\Kereta;
+use App\Models\DetailPembelianTiket;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+
 
 class KeretaController extends Controller
 {
     public function index()
     {
-        return response()->json(
-            Kereta::all(),
-            200
-        );
+        $keretas = Kereta::with('gerbong')->get();
+
+        //  Compute stats untuk setiap kereta
+        $keretas->each(function($kereta) {
+            $totalKursi = 0;
+            $totalBooked = 0;
+
+            foreach ($kereta->gerbong as $gerbong) {
+                // Total kursi di gerbong ini
+                $kursiCount = $gerbong->kursi()->count();
+                $totalKursi += $kursiCount;
+                
+                if ($kursiCount > 0) {
+                    // Hitung kursi yang booked (untuk jadwal aktif mana saja)
+                    $kursiIds = $gerbong->kursi()->pluck('id');
+                    
+                    $bookedCount = DetailPembelianTiket::whereIn('id_kursi', $kursiIds)
+                        ->whereHas('pembelianTiket', function($q) {
+                            $q->where('status', 'booked');
+                        })
+                        ->distinct('id_kursi')
+                        ->count('id_kursi');
+                    
+                    $totalBooked += $bookedCount;
+                }
+            }
+
+            // Tambahkan computed fields
+            $kereta->total_gerbong = $kereta->gerbong->count();
+            $kereta->total_kursi = $totalKursi;
+            $kereta->kursi_terbooked = $totalBooked;
+            $kereta->kursi_tersedia = $totalKursi - $totalBooked;
+
+            // Remove relasi gerbong dari response (tidak perlu di frontend)
+            unset($kereta->gerbong);
+        });
+
+        return response()->json($keretas, 200);
     }
 
-    public function show($id)
+    // show
+     public function show($id)
     {
-        $kereta = Kereta::findOrFail($id);
+        $kereta = Kereta::with('gerbong')->findOrFail($id);
+        
+        //  Compute stats untuk kereta ini
+        $totalKursi = 0;
+        $totalBooked = 0;
+
+        foreach ($kereta->gerbong as $gerbong) {
+            $kursiCount = $gerbong->kursi()->count();
+            $totalKursi += $kursiCount;
+            
+            if ($kursiCount > 0) {
+                $kursiIds = $gerbong->kursi()->pluck('id');
+                
+                $bookedCount = DetailPembelianTiket::whereIn('id_kursi', $kursiIds)
+                    ->whereHas('pembelianTiket', function($q) {
+                        $q->where('status', 'booked');
+                    })
+                    ->distinct('id_kursi')
+                    ->count('id_kursi');
+                
+                $totalBooked += $bookedCount;
+            }
+        }
+
+        $kereta->total_gerbong = $kereta->gerbong->count();
+        $kereta->total_kursi = $totalKursi;
+        $kereta->kursi_terbooked = $totalBooked;
+        $kereta->kursi_tersedia = $totalKursi - $totalBooked;
+
         return response()->json($kereta, 200);
     }
+
 
   
     public function store(Request $request)

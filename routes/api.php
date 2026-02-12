@@ -9,6 +9,7 @@ use App\Http\Controllers\GerbongController;
 use App\Http\Controllers\KursiController;
 use App\Http\Controllers\JadwalKeretaController;
 use App\Http\Controllers\PembelianTiketController;
+use App\Http\Controllers\StatsController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -217,6 +218,17 @@ Route::prefix('v1')->group(function () {
                 ->group(function () {
                     Route::get('/statistics/data', 'statistics')->name('statistics');
                 });
+        });
+
+    // ==========================================
+    // STATS CONTROLLER
+    // ==========================================
+    Route::middleware(['auth:sanctum', 'role:petugas'])
+        ->controller(StatsController::class)
+        ->prefix('stats')
+        ->name('api.v1.stats.')
+        ->group(function () {
+            Route::get('/dashboard', 'getDashboardStats')->name('dashboard');
         });
 
 });

@@ -18,6 +18,7 @@ class PembelianTiket extends Model
         'id_jadwal_kereta',
         'total_harga',
         'status', 
+        'metode_pembayaran',
     ];
 
     protected $casts = [

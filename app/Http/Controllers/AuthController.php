@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
+// use Illuminate\Support\Facades\Auth;
 
 class AuthController extends Controller
 {
@@ -52,33 +53,76 @@ class AuthController extends Controller
         ], 201);
     }
 
-    // LOGIN
+    // // LOGIN
+    // public function login(Request $request)
+    // {
+    //     $request->validate([
+    //         'email'    => 'required|email',
+    //         'password' => 'required'
+    //     ]);
+
+    //     if (!Auth::attempt($request->only('email', 'password'))) {
+    //         return response()->json([
+    //             'message' => 'Invalid credentials'
+    //         ], 401);
+    //     }
+
+    //     // 🔐 penting untuk security
+    //     $request->session()->regenerate();
+
+    //     return response()->json([
+    //         'message' => 'Login success',
+    //         'user' => Auth::user(),
+    //     ]);
+    // }
     public function login(Request $request)
     {
         $request->validate([
-            'email'    => 'required',
+            'email'    => 'required|email',
             'password' => 'required'
         ]);
 
         $user = User::where('email', $request->email)->first();
+
         if (!$user || !Hash::check($request->password, $user->password)) {
             return response()->json(['message' => 'Invalid credentials'], 401);
         }
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        return response()->json([
-            'message' => 'Login success',
-            'token' => $token,
-            'user' => $user
-        ]);
+        return response()
+            ->json([
+                'message' => 'Login success',
+                'token' => $token, 
+                'user' => $user
+            ])
+            ->cookie(
+                'auth_token', // nama cookie
+                $token,
+                60 * 24 * 7,   // 7 hari
+                '/',
+                null,
+                true,         // secure (HTTPS)
+                true          // httpOnly
+            );
     }
 
     // LOGOUT
     public function logout(Request $request)
     {
-        $request->user()->currentAccessToken()->delete();
+        if ($request->user()) {
+            $request->user()->currentAccessToken()->delete();
+        }
 
-        return response()->json(['message' => 'Logged out']);
+        return response()
+            ->json([
+                'message' => 'Logged out successfully'
+            ])
+            ->cookie(
+                'auth_token',
+                '',
+                -1 // hapus cookie
+            );
     }
+
 }
